@@ -11,7 +11,7 @@ license = "MIT/Apache-2.0"
 [dependencies]
 bitvec = "1.0.1"
 crossbeam-channel = "0.5.1"
-ec-gpu = "0.2.0"
+ec-gpu = { path = "../ec-gpu" }
 execute = "0.2.9"
 ff = { version = "0.12.0", default-features = false }
 group = "0.12.0"
@@ -24,6 +24,7 @@ rust-gpu-tools = { version = "0.6.1", default-features = false, optional = true 
 sha2 = "0.10"
 thiserror = "1.0.30"
 yastl = "0.1.2"
+ark-std = { version = "0.3", features = ["print-trace"] }
 
 [dev-dependencies]
 # NOTE vmx 2022-07-07: Using the `__private_bench` feature of `blstrs` is just

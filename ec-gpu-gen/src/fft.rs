@@ -1,6 +1,7 @@
 use std::cmp;
 use std::sync::{Arc, RwLock};
 
+use ark_std::{start_timer, end_timer};
 use ec_gpu::GpuName;
 use ff::Field;
 use log::{error, info};
@@ -18,7 +19,7 @@ pub struct SingleFftKernel<'a, F>
 where
     F: Field + GpuName,
 {
-    program: Program,
+    pub program: Program,
     /// An optional function which will be called at places where it is possible to abort the FFT
     /// calculations. If it returns true, the calculation will be aborted with an
     /// [`EcError::Aborted`].
@@ -77,7 +78,9 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
             }
             let omegas_buffer = program.create_buffer_from_slice(&omegas)?;
 
+            //let timer = start_timer!(|| format!("copy {}", log_n));
             program.write_from_buffer(&mut src_buffer, &*input)?;
+            //end_timer!(timer);
             // Specifies log2 of `p`, (http://www.bealto.com/gpu-fft_group-1.html)
             let mut log_p = 0u32;
             // Each iteration performs a FFT round
@@ -130,7 +133,7 @@ pub struct FftKernel<'a, F>
 where
     F: Field + GpuName,
 {
-    kernels: Vec<SingleFftKernel<'a, F>>,
+    pub kernels: Vec<SingleFftKernel<'a, F>>,
 }
 
 impl<'a, F> FftKernel<'a, F>
