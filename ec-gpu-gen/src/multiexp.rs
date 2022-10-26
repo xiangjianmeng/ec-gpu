@@ -1,6 +1,7 @@
 use std::ops::AddAssign;
 use std::sync::{Arc, RwLock};
 
+use ark_std::{end_timer, start_timer};
 use ec_gpu::GpuName;
 use ff::PrimeField;
 use group::{prime::PrimeCurveAffine, Group};
@@ -188,6 +189,7 @@ where
         let mut acc = G::Curve::identity();
         let mut bits = 0;
         let exp_bits = exp_size::<G::Scalar>() * 8;
+
         for i in 0..num_windows {
             let w = std::cmp::min(window_size, exp_bits - bits);
             for _ in 0..w {
@@ -198,7 +200,6 @@ where
             }
             bits += w; // Process the next window
         }
-
         Ok(acc)
     }
 
