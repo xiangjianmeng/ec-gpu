@@ -135,3 +135,54 @@ KERNEL void FIELD_eval_h_lookups(
   tmp = FIELD_mul(tmp, l_active_row[idx]);
   value[idx] = FIELD_add(value[idx], tmp);
 }
+
+KERNEL void FIELD_eval_constant(
+  GLOBAL FIELD* value,
+  GLOBAL FIELD* c
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  value[idx] =  *c;
+}
+
+KERNEL void FIELD_eval_sum(
+  GLOBAL FIELD* l,
+  GLOBAL FIELD* r,
+  int32_t l_rot,
+  int32_t r_rot,
+  uint32_t size
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  uint lidx = (idx + l_rot) & (size - 1);
+  uint ridx = (idx + r_rot) & (size - 1);
+  l[idx] =  FIELD_add(l[lidx], r[ridx]);
+}
+
+KERNEL void FIELD_eval_mul(
+  GLOBAL FIELD* l,
+  GLOBAL FIELD* r,
+  int32_t l_rot,
+  int32_t r_rot,
+  uint32_t size
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  uint lidx = (idx + l_rot) & (size - 1);
+  uint ridx = (idx + r_rot) & (size - 1);
+  l[idx] =  FIELD_mul(l[lidx], r[ridx]);
+}
+
+KERNEL void FIELD_eval_fft_prepare(
+  GLOBAL FIELD* origin_value,
+  GLOBAL FIELD* value,
+  uint32_t origin_size
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  if (idx < origin_size) {
+    value[idx] = origin_value[idx];
+  } else {
+    value[idx] = FIELD_ZERO;
+  }
+}

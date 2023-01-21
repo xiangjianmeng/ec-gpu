@@ -78,9 +78,11 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
             }
             let omegas_buffer = program.create_buffer_from_slice(&omegas)?;
 
-            //let timer = start_timer!(|| format!("copy {}", log_n));
+            //let timer = start_timer!(|| format!("fft copy {}", log_n));
             program.write_from_buffer(&mut src_buffer, &*input)?;
             //end_timer!(timer);
+
+            //let timer = start_timer!(|| format!("fft main {}", log_n));
             // Specifies log2 of `p`, (http://www.bealto.com/gpu-fft_group-1.html)
             let mut log_p = 0u32;
             // Each iteration performs a FFT round
@@ -118,8 +120,11 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
                 log_p += deg;
                 std::mem::swap(&mut src_buffer, &mut dst_buffer);
             }
+            //end_timer!(timer);
 
+            //let timer = start_timer!(|| format!("fft copy back {}", log_n));
             program.read_into_buffer(&src_buffer, input)?;
+            //end_timer!(timer);
 
             Ok(())
         });
