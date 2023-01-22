@@ -146,6 +146,7 @@ KERNEL void FIELD_eval_constant(
 }
 
 KERNEL void FIELD_eval_sum(
+  GLOBAL FIELD* res,
   GLOBAL FIELD* l,
   GLOBAL FIELD* r,
   int32_t l_rot,
@@ -154,12 +155,13 @@ KERNEL void FIELD_eval_sum(
 ) {
   uint gid = GET_GLOBAL_ID();
   uint idx = gid;
-  uint lidx = (idx + l_rot) & (size - 1);
-  uint ridx = (idx + r_rot) & (size - 1);
-  l[idx] =  FIELD_add(l[lidx], r[ridx]);
+  uint lidx = (idx + size + l_rot) & (size - 1);
+  uint ridx = (idx + size + r_rot) & (size - 1);
+  res[idx] =  FIELD_add(l[lidx], r[ridx]);
 }
 
 KERNEL void FIELD_eval_mul(
+  GLOBAL FIELD* res,
   GLOBAL FIELD* l,
   GLOBAL FIELD* r,
   int32_t l_rot,
@@ -168,9 +170,54 @@ KERNEL void FIELD_eval_mul(
 ) {
   uint gid = GET_GLOBAL_ID();
   uint idx = gid;
-  uint lidx = (idx + l_rot) & (size - 1);
-  uint ridx = (idx + r_rot) & (size - 1);
-  l[idx] =  FIELD_mul(l[lidx], r[ridx]);
+  uint lidx = (idx + size + l_rot) & (size - 1);
+  uint ridx = (idx + size + r_rot) & (size - 1);
+  res[idx] =  FIELD_mul(l[lidx], r[ridx]);
+}
+
+KERNEL void FIELD_eval_lcbeta(
+  GLOBAL FIELD* res,
+  GLOBAL FIELD* l,
+  GLOBAL FIELD* r,
+  int32_t l_rot,
+  int32_t r_rot,
+  uint32_t size,
+  GLOBAL FIELD* beta
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  uint lidx = (idx + size + l_rot) & (size - 1);
+  uint ridx = (idx + size + r_rot) & (size - 1);
+  res[idx] =  FIELD_mul(FIELD_add(l[lidx], beta[0]), r[ridx]);
+}
+
+KERNEL void FIELD_eval_lctheta(
+  GLOBAL FIELD* res,
+  GLOBAL FIELD* l,
+  GLOBAL FIELD* r,
+  int32_t l_rot,
+  int32_t r_rot,
+  uint32_t size,
+  GLOBAL FIELD* theta
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  uint lidx = (idx + size + l_rot) & (size - 1);
+  uint ridx = (idx + size + r_rot) & (size - 1);
+  res[idx] =  FIELD_add(FIELD_mul(l[lidx], theta[0]), r[ridx]);
+}
+
+KERNEL void FIELD_eval_addgamma(
+  GLOBAL FIELD* res,
+  GLOBAL FIELD* l,
+  int32_t l_rot,
+  uint32_t size,
+  GLOBAL FIELD* gamma
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  uint lidx = (idx + size + l_rot) & (size - 1);
+  res[idx] =  FIELD_add(l[lidx], gamma[0]);
 }
 
 KERNEL void FIELD_eval_fft_prepare(
