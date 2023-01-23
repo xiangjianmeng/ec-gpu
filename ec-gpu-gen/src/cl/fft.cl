@@ -85,14 +85,14 @@ KERNEL void FIELD_eval_h_lookups(
   GLOBAL FIELD* l_last,
   GLOBAL FIELD* l_active_row,
   GLOBAL FIELD* y_beta_gamma,
-  uint32_t rot_scale,
-  uint32_t size
+  uint rot_scale,
+  uint size
 ) {
   uint gid = GET_GLOBAL_ID();
   uint idx = gid;
 
-  uint32_t r_next = (idx + rot_scale) & (size - 1);
-  uint32_t r_prev = (idx + size - rot_scale) & (size - 1);
+  uint r_next = (idx + rot_scale) & (size - 1);
+  uint r_prev = (idx + size - rot_scale) & (size - 1);
 
   // l_0(X) * (1 - z(X)) = 0
   value[idx] = FIELD_mul(value[idx], y_beta_gamma[0]);
@@ -148,8 +148,8 @@ KERNEL void FIELD_eval_constant(
 KERNEL void FIELD_eval_scale(
   GLOBAL FIELD* res,
   GLOBAL FIELD* l,
-  int32_t l_rot,
-  uint32_t size,
+  int l_rot,
+  uint size,
   GLOBAL FIELD* c
 ) {
   uint gid = GET_GLOBAL_ID();
@@ -162,9 +162,9 @@ KERNEL void FIELD_eval_sum(
   GLOBAL FIELD* res,
   GLOBAL FIELD* l,
   GLOBAL FIELD* r,
-  int32_t l_rot,
-  int32_t r_rot,
-  uint32_t size
+  int l_rot,
+  int r_rot,
+  uint size
 ) {
   uint gid = GET_GLOBAL_ID();
   uint idx = gid;
@@ -177,9 +177,9 @@ KERNEL void FIELD_eval_mul(
   GLOBAL FIELD* res,
   GLOBAL FIELD* l,
   GLOBAL FIELD* r,
-  int32_t l_rot,
-  int32_t r_rot,
-  uint32_t size
+  int l_rot,
+  int r_rot,
+  uint size
 ) {
   uint gid = GET_GLOBAL_ID();
   uint idx = gid;
@@ -192,9 +192,9 @@ KERNEL void FIELD_eval_lcbeta(
   GLOBAL FIELD* res,
   GLOBAL FIELD* l,
   GLOBAL FIELD* r,
-  int32_t l_rot,
-  int32_t r_rot,
-  uint32_t size,
+  int l_rot,
+  int r_rot,
+  uint size,
   GLOBAL FIELD* beta
 ) {
   uint gid = GET_GLOBAL_ID();
@@ -208,9 +208,9 @@ KERNEL void FIELD_eval_lctheta(
   GLOBAL FIELD* res,
   GLOBAL FIELD* l,
   GLOBAL FIELD* r,
-  int32_t l_rot,
-  int32_t r_rot,
-  uint32_t size,
+  int l_rot,
+  int r_rot,
+  uint size,
   GLOBAL FIELD* theta
 ) {
   uint gid = GET_GLOBAL_ID();
@@ -223,8 +223,8 @@ KERNEL void FIELD_eval_lctheta(
 KERNEL void FIELD_eval_addgamma(
   GLOBAL FIELD* res,
   GLOBAL FIELD* l,
-  int32_t l_rot,
-  uint32_t size,
+  int l_rot,
+  uint size,
   GLOBAL FIELD* gamma
 ) {
   uint gid = GET_GLOBAL_ID();
@@ -236,7 +236,7 @@ KERNEL void FIELD_eval_addgamma(
 KERNEL void FIELD_eval_fft_prepare(
   GLOBAL FIELD* origin_value,
   GLOBAL FIELD* value,
-  uint32_t origin_size
+  uint origin_size
 ) {
   uint gid = GET_GLOBAL_ID();
   uint idx = gid;
@@ -244,5 +244,28 @@ KERNEL void FIELD_eval_fft_prepare(
     value[idx] = origin_value[idx];
   } else {
     value[idx] = FIELD_ZERO;
+  }
+}
+
+KERNEL void FIELD_sort(
+  GLOBAL FIELD* value,
+  uint i,
+  uint j
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint id = gid;
+
+  uint direction = (id >> i) & 1;
+  uint log_step = i - j;
+  uint step = 1 << log_step;
+  uint offset = id & (step - 1);
+  uint index0 = ((id >> log_step) << (log_step + 1)) | offset;
+  uint index1 = index0 | step;
+
+  if (FIELD_gte(FIELD_unmont(value[index0]), FIELD_unmont(value[index1])) ^ direction)
+  {
+    FIELD t = value[index0];
+    value[index0] = value[index1];
+    value[index1] = t;
   }
 }
