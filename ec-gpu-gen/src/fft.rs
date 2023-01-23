@@ -52,10 +52,10 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
             // All usages are safe as the buffers are initialized from either the host or the GPU
             // before they are read.
 
-            let timer = start_timer!(|| format!("create buffer"));
+            //let timer = start_timer!(|| format!("create buffer"));
             let mut src_buffer = unsafe { program.create_buffer::<F>(n)? };
             let mut dst_buffer = unsafe { program.create_buffer::<F>(n)? };
-            end_timer!(timer);
+            //end_timer!(timer);
 
             // The precalculated values pq` and `omegas` are valid for radix degrees up to `max_deg`
             let max_deg = cmp::min(MAX_LOG2_RADIX, log_n);
@@ -63,7 +63,7 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
             // Precalculate:
             // [omega^(0/(2^(deg-1))), omega^(1/(2^(deg-1))), ..., omega^((2^(deg-1)-1)/(2^(deg-1)))]
 
-            let timer = start_timer!(|| "gen omega");
+            //let timer = start_timer!(|| "gen omega");
             let mut pq = vec![F::zero(); 1 << max_deg >> 1];
             let twiddle = omega.pow_vartime([(n >> max_deg) as u64]);
             pq[0] = F::one();
@@ -74,7 +74,7 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
                     pq[i].mul_assign(&twiddle);
                 }
             }
-            end_timer!(timer);
+            //end_timer!(timer);
             let pq_buffer = program.create_buffer_from_slice(&pq)?;
 
             // Precalculate [omega, omega^2, omega^4, omega^8, ..., omega^(2^31)]
@@ -94,7 +94,7 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
             let mut log_p = 0u32;
             // Each iteration performs a FFT round
             while log_p < log_n {
-                let timer = start_timer!(|| format!("round {}", log_p));
+                //let timer = start_timer!(|| format!("round {}", log_p));
                 if let Some(maybe_abort) = &self.maybe_abort {
                     if maybe_abort() {
                         return Err(EcError::Aborted);
@@ -127,7 +127,7 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
 
                 log_p += deg;
                 std::mem::swap(&mut src_buffer, &mut dst_buffer);
-                end_timer!(timer);
+                //end_timer!(timer);
             }
             //end_timer!(timer);
 
