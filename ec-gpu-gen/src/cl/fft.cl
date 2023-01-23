@@ -145,6 +145,19 @@ KERNEL void FIELD_eval_constant(
   value[idx] =  *c;
 }
 
+KERNEL void FIELD_eval_scale(
+  GLOBAL FIELD* res,
+  GLOBAL FIELD* l,
+  int32_t l_rot,
+  uint32_t size,
+  GLOBAL FIELD* c
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  uint lidx = (idx + size + l_rot) & (size - 1);
+  res[idx] =  FIELD_mul(l[lidx], c[0]);
+}
+
 KERNEL void FIELD_eval_sum(
   GLOBAL FIELD* res,
   GLOBAL FIELD* l,
