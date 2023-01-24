@@ -269,3 +269,11 @@ KERNEL void FIELD_sort(
     value[index1] = t;
   }
 }
+
+KERNEL void FIELD_batch_unmont(
+  GLOBAL FIELD* value
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  value[idx] = FIELD_unmont(value[idx]);
+}
