@@ -1,11 +1,9 @@
-use std::cmp;
-use std::sync::{Arc, RwLock};
-
-use ark_std::{end_timer, start_timer};
 use ec_gpu::GpuName;
 use ff::Field;
 use log::{error, info};
 use rust_gpu_tools::{program_closures, LocalBuffer, Program};
+use std::cmp;
+use std::sync::{Arc, RwLock};
 
 use crate::error::{EcError, EcResult};
 use crate::threadpool::THREAD_POOL;
@@ -19,6 +17,7 @@ pub struct SingleFftKernel<'a, F>
 where
     F: Field + GpuName,
 {
+    /// An abstraction for running programs on CUDA or OpenCL.
     pub program: Program,
     /// An optional function which will be called at places where it is possible to abort the FFT
     /// calculations. If it returns true, the calculation will be aborted with an
@@ -147,6 +146,7 @@ pub struct FftKernel<'a, F>
 where
     F: Field + GpuName,
 {
+    /// FFT kernel for a set of GPU.
     pub kernels: Vec<SingleFftKernel<'a, F>>,
 }
 

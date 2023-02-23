@@ -1,13 +1,14 @@
-use std::ops::AddAssign;
-use std::sync::{Arc, RwLock};
-
-use ark_std::{end_timer, start_timer};
 use ec_gpu::GpuName;
 use ff::PrimeField;
 use group::{prime::PrimeCurveAffine, Group};
 use log::{error, info};
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelRefMutIterator;
 use rust_gpu_tools::{program_closures, Device, Program};
+use std::ops::AddAssign;
+use std::sync::{Arc, RwLock};
 use yastl::Scope;
+use rayon::iter::ParallelIterator;
 
 use crate::{
     error::{EcError, EcResult},
@@ -184,6 +185,16 @@ where
 
         let results = self.program.run(closures, ())?;
 
+        let mut window_results = vec![G::Curve::identity(); num_windows];
+        window_results
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, r)| {
+                for g in 0..num_groups {
+                    r.add_assign(&results[g * num_windows + i])
+                }
+            });
+
         // Using the algorithm below, we can calculate the final result by accumulating the results
         // of those `NUM_GROUPS` * `NUM_WINDOWS` threads.
         let mut acc = G::Curve::identity();
@@ -192,14 +203,15 @@ where
 
         for i in 0..num_windows {
             let w = std::cmp::min(window_size, exp_bits - bits);
-            for _ in 0..w {
-                acc = acc.double();
+            if i != 0 {
+                for _ in 0..w {
+                    acc = acc.double();
+                }
             }
-            for g in 0..num_groups {
-                acc.add_assign(&results[g * num_windows + i]);
-            }
+            acc.add_assign(&window_results[i]);
             bits += w; // Process the next window
         }
+
         Ok(acc)
     }
 

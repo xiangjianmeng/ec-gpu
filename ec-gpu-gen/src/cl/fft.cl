@@ -247,6 +247,22 @@ KERNEL void FIELD_eval_fft_prepare(
   }
 }
 
+KERNEL void FIELD_batch_unmont(
+  GLOBAL FIELD* value
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint id = gid;
+  value[id] = FIELD_unmont(value[id]);
+}
+
+KERNEL void FIELD_batch_mont(
+  GLOBAL FIELD* value
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint id = gid;
+  value[id] = FIELD_mont(value[id]);
+}
+
 KERNEL void FIELD_sort(
   GLOBAL FIELD* value,
   uint i,
@@ -262,18 +278,10 @@ KERNEL void FIELD_sort(
   uint index0 = ((id >> log_step) << (log_step + 1)) | offset;
   uint index1 = index0 | step;
 
-  if (FIELD_gte(FIELD_unmont(value[index0]), FIELD_unmont(value[index1])) ^ direction)
+  if (FIELD_gte(value[index0], value[index1]) ^ direction)
   {
     FIELD t = value[index0];
     value[index0] = value[index1];
     value[index1] = t;
   }
-}
-
-KERNEL void FIELD_batch_unmont(
-  GLOBAL FIELD* value
-) {
-  uint gid = GET_GLOBAL_ID();
-  uint idx = gid;
-  value[idx] = FIELD_unmont(value[idx]);
 }
