@@ -173,6 +173,19 @@ KERNEL void FIELD_eval_sum(
   res[idx] =  FIELD_add(l[lidx], r[ridx]);
 }
 
+KERNEL void FIELD_eval_sum_c(
+  GLOBAL FIELD* res,
+  GLOBAL FIELD* l,
+  int l_rot,
+  GLOBAL FIELD* r,
+  uint size
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  uint lidx = (idx + size + l_rot) & (size - 1);
+  res[idx] =  FIELD_add(l[lidx], r[0]);
+}
+
 KERNEL void FIELD_eval_mul(
   GLOBAL FIELD* res,
   GLOBAL FIELD* l,
@@ -186,6 +199,20 @@ KERNEL void FIELD_eval_mul(
   uint lidx = (idx + size + l_rot) & (size - 1);
   uint ridx = (idx + size + r_rot) & (size - 1);
   res[idx] =  FIELD_mul(l[lidx], r[ridx]);
+}
+
+
+KERNEL void FIELD_eval_mul_c(
+  GLOBAL FIELD* res,
+  GLOBAL FIELD* l,
+  int l_rot,
+  GLOBAL FIELD* r,
+  uint size
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+  uint lidx = (idx + size + l_rot) & (size - 1);
+  res[idx] =  FIELD_mul(l[lidx], r[0]);
 }
 
 KERNEL void FIELD_eval_lcbeta(
