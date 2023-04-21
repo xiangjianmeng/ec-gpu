@@ -176,7 +176,6 @@ where
                 .arg(&(window_size as u32))
                 .run()?;
 
-            let timer = start_timer!(|| "group");
             let mut results = vec![G::Curve::identity(); num_windows];
             let acc_buffer = program.create_buffer_from_slice(&results)?;
 
@@ -207,8 +206,6 @@ where
                 .arg(&acc_buffer)
                 .arg(&(num_windows as u32))
                 .run()?;
-
-            end_timer!(timer);
 
             program.read_into_buffer(&acc_buffer, &mut results)?;
 
