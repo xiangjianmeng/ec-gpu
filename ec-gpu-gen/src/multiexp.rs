@@ -1,14 +1,13 @@
+use ark_std::end_timer;
+use ark_std::start_timer;
 use ec_gpu::GpuName;
 use ff::PrimeField;
 use group::{prime::PrimeCurveAffine, Group};
 use log::{error, info};
-use rayon::iter::IndexedParallelIterator;
-use rayon::iter::IntoParallelRefMutIterator;
 use rust_gpu_tools::{program_closures, Device, Program};
 use std::ops::AddAssign;
 use std::sync::{Arc, RwLock};
 use yastl::Scope;
-use rayon::iter::ParallelIterator;
 
 use crate::{
     error::{EcError, EcResult},
@@ -177,23 +176,46 @@ where
                 .arg(&(window_size as u32))
                 .run()?;
 
-            let mut results = vec![G::Curve::identity(); self.work_units];
-            program.read_into_buffer(&result_buffer, &mut results)?;
+            let timer = start_timer!(|| "group");
+            let mut results = vec![G::Curve::identity(); num_windows];
+            let acc_buffer = program.create_buffer_from_slice(&results)?;
+
+            let mut max_step = num_groups;
+
+            while max_step > 1 {
+                let step = max_step.next_power_of_two() >> 1;
+                let global_work_size = div_ceil(num_windows * step, 1);
+
+                let kernel_name = format!("{}_multiexp_group_step", G::name());
+                let kernel = program.create_kernel(&kernel_name, global_work_size, 1)?;
+
+                kernel
+                    .arg(&result_buffer)
+                    .arg(&(num_groups as u32))
+                    .arg(&(num_windows as u32))
+                    .arg(&(step as u32))
+                    .run()?;
+
+                max_step = step;
+            }
+
+            let kernel_name = format!("{}_multiexp_group_collect", G::name());
+            let kernel = program.create_kernel(&kernel_name, num_windows, 1)?;
+
+            kernel
+                .arg(&result_buffer)
+                .arg(&acc_buffer)
+                .arg(&(num_windows as u32))
+                .run()?;
+
+            end_timer!(timer);
+
+            program.read_into_buffer(&acc_buffer, &mut results)?;
 
             Ok(results)
         });
 
         let results = self.program.run(closures, ())?;
-
-        let mut window_results = vec![G::Curve::identity(); num_windows];
-        window_results
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(i, r)| {
-                for g in 0..num_groups {
-                    r.add_assign(&results[g * num_windows + i])
-                }
-            });
 
         // Using the algorithm below, we can calculate the final result by accumulating the results
         // of those `NUM_GROUPS` * `NUM_WINDOWS` threads.
@@ -208,7 +230,7 @@ where
                     acc = acc.double();
                 }
             }
-            acc.add_assign(&window_results[i]);
+            acc.add_assign(&results[i]);
             bits += w; // Process the next window
         }
 

@@ -8,6 +8,36 @@
  * threads running in parallel for calculating a multiexp instance.
  */
 
+KERNEL void POINT_multiexp_group_step(
+  GLOBAL POINT_jacobian *results,
+  uint num_groups,
+  uint num_windows,
+  uint step
+) {
+  const uint gid = GET_GLOBAL_ID();
+
+  uint i_windows = gid % num_windows;
+  uint i_slot = gid / num_windows;
+
+  if (i_slot < step && i_slot + step < num_groups) {
+    uint l = i_windows + i_slot * num_windows;
+    uint r = l + step * num_windows;
+    results[i_windows + i_slot * num_windows] = POINT_add(results[l], results[r]);
+  }
+}
+
+KERNEL void POINT_multiexp_group_collect(
+  GLOBAL POINT_jacobian *results,
+  GLOBAL POINT_jacobian *acc,
+  uint num_windows
+) {
+  const uint gid = GET_GLOBAL_ID();
+
+  if (gid < num_windows) {
+    acc[gid] = results[gid];
+  }
+}
+
 KERNEL void POINT_multiexp(
     GLOBAL POINT_affine *bases,
     GLOBAL POINT_jacobian *buckets,
