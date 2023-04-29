@@ -18,7 +18,7 @@ fn multiexp_gpu<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+    exponents: Arc<Vec<G::Scalar>>,
     kern: &mut MultiexpKernel<G>,
 ) -> Result<G::Curve, EcError>
 where
@@ -61,7 +61,7 @@ fn gpu_multiexp_consistency() {
 
         let v = Arc::new(
             (0..samples)
-                .map(|_| <Bls12 as Engine>::Fr::random(&mut rng).to_repr())
+                .map(|_| <Bls12 as Engine>::Fr::random(&mut rng))
                 .collect::<Vec<_>>(),
         );
 

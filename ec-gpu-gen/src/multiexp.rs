@@ -90,7 +90,7 @@ where
 ///
 /// It's the actual bytes size it needs in memory, not it's theoratical bit size.
 fn exp_size<F: PrimeField>() -> usize {
-    std::mem::size_of::<F::Repr>()
+    std::mem::size_of::<F>()
 }
 
 impl<'a, G> SingleMultiexpKernel<'a, G>
@@ -126,11 +126,7 @@ where
     /// The number of `bases` and `exponents` are determined by [`SingleMultiexpKernel`]`::n`, this
     /// means that it is guaranteed that this amount of calculations fit on the GPU this kernel is
     /// running on.
-    pub fn multiexp(
-        &self,
-        bases: &[G],
-        exponents: &[<G::Scalar as PrimeField>::Repr],
-    ) -> EcResult<G::Curve> {
+    pub fn multiexp(&self, bases: &[G], exponents: &[G::Scalar]) -> EcResult<G::Curve> {
         assert_eq!(bases.len(), exponents.len());
 
         if let Some(maybe_abort) = &self.maybe_abort {
@@ -253,7 +249,7 @@ pub struct MultiexpKernel<'a, G>
 where
     G: PrimeCurveAffine,
 {
-    kernels: Vec<SingleMultiexpKernel<'a, G>>,
+    pub kernels: Vec<SingleMultiexpKernel<'a, G>>,
 }
 
 impl<'a, G> MultiexpKernel<'a, G>
@@ -321,7 +317,7 @@ where
         &'s mut self,
         scope: &Scope<'s>,
         bases: &'s [G],
-        exps: &'s [<G::Scalar as PrimeField>::Repr],
+        exps: &'s [G::Scalar],
         results: &'s mut [G::Curve],
         error: Arc<RwLock<EcResult<()>>>,
     ) {
@@ -368,7 +364,7 @@ where
         &mut self,
         pool: &Worker,
         bases_arc: Arc<Vec<G>>,
-        exps: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+        exps: Arc<Vec<G::Scalar>>,
         skip: usize,
     ) -> EcResult<G::Curve> {
         // Bases are skipped by `self.1` elements, when converted from (Arc<Vec<G>>, usize) to Source

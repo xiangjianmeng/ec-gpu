@@ -37,7 +37,7 @@ fn bench_multiexp(crit: &mut Criterion) {
         .collect();
     let max_exponents: Vec<_> = (0..MAX_ELEMENTS)
         .into_par_iter()
-        .map(|_| <Bls12 as Engine>::Fr::random(rand::thread_rng()).to_repr())
+        .map(|_| <Bls12 as Engine>::Fr::random(rand::thread_rng()))
         .collect();
 
     let num_elements: Vec<_> = (10..MAX_ELEMENTS_POWER).map(|shift| 1 << shift).collect();

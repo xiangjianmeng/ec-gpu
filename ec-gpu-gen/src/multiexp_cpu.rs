@@ -87,7 +87,7 @@ pub trait QueryDensity: Sized {
 
     fn iter(self) -> Self::Iter;
     fn get_query_size(self) -> Option<usize>;
-    fn generate_exps<F: PrimeField>(self, exponents: Arc<Vec<F::Repr>>) -> Arc<Vec<F::Repr>>;
+    fn generate_exps<F: PrimeField>(self, exponents: Arc<Vec<F>>) -> Arc<Vec<F>>;
 }
 
 #[derive(Clone)]
@@ -110,7 +110,7 @@ impl<'a> QueryDensity for &'a FullDensity {
         None
     }
 
-    fn generate_exps<F: PrimeField>(self, exponents: Arc<Vec<F::Repr>>) -> Arc<Vec<F::Repr>> {
+    fn generate_exps<F: PrimeField>(self, exponents: Arc<Vec<F>>) -> Arc<Vec<F>> {
         exponents
     }
 }
@@ -132,7 +132,7 @@ impl<'a> QueryDensity for &'a DensityTracker {
         Some(self.bv.len())
     }
 
-    fn generate_exps<F: PrimeField>(self, exponents: Arc<Vec<F::Repr>>) -> Arc<Vec<F::Repr>> {
+    fn generate_exps<F: PrimeField>(self, exponents: Arc<Vec<F>>) -> Arc<Vec<F>> {
         let exps: Vec<_> = exponents
             .iter()
             .zip(self.bv.iter())
@@ -241,7 +241,7 @@ fn shr(le_bytes: &mut [u8], mut n: u32) {
 fn multiexp_inner<Q, D, G, S>(
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+    exponents: Arc<Vec<G::Scalar >>,
     c: u32,
 ) -> Result<<G as PrimeCurveAffine>::Curve, EcError>
 where
@@ -253,7 +253,7 @@ where
     // Perform this region of the multiexp
     let this = move |bases: S,
                      density_map: D,
-                     exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+                     exponents: Arc<Vec<G::Scalar>>,
                      skip: u32|
           -> Result<_, EcError> {
         // Accumulate the result
@@ -273,6 +273,7 @@ where
 
         // Sort the bases into buckets
         for (&exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
+            let exp: <G::Scalar as PrimeField>::Repr = exp.to_repr();
             if density {
                 if exp.as_ref() == zero.as_ref() {
                     bases.skip(1)?;
@@ -334,7 +335,7 @@ pub fn multiexp_cpu<'b, Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+    exponents: Arc<Vec<G::Scalar>>,
 ) -> Waiter<Result<<G as PrimeCurveAffine>::Curve, EcError>>
 where
     for<'a> &'a Q: QueryDensity,
@@ -404,7 +405,7 @@ mod tests {
         let now = std::time::Instant::now();
         let pool = Worker::new();
 
-        let v = Arc::new(v.into_iter().map(|fr| fr.to_repr()).collect());
+        let v = Arc::new(v.into_iter().map(|fr| fr).collect());
         let fast = multiexp_cpu(&pool, (g, 0), FullDensity, v).wait().unwrap();
 
         println!("Fast: {}", now.elapsed().as_millis());
