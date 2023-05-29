@@ -312,3 +312,49 @@ KERNEL void FIELD_sort(
     value[index1] = t;
   }
 }
+
+KERNEL void FIELD_calc_lookup_z(
+  GLOBAL FIELD* permuted_input,
+  GLOBAL FIELD* permuted_table,
+  GLOBAL FIELD* compressed_input,
+  GLOBAL FIELD* compressed_table,
+  GLOBAL FIELD* beta_gamma,
+  uint len,
+  uint slot_len)
+{
+  uint gid = GET_GLOBAL_ID();
+  uint id = gid;
+  uint start = id * slot_len;
+  uint end = (start + slot_len) > len ? len : (start + slot_len);
+  FIELD beta = beta_gamma[0];
+  FIELD gamma = beta_gamma[1];
+  FIELD t1;
+  FIELD t2;
+  FIELD t3 = FIELD_ONE;
+
+  for (uint i = start; i < end; i++) {
+    t1 = FIELD_add(permuted_input[i], beta);
+    t2 = FIELD_add(permuted_table[i], gamma);
+    t1 = FIELD_mul(t1, t2);
+    permuted_input[i] = t3;
+    permuted_table[i] = t1;
+    t3 = FIELD_mul(t1, t3);
+  }
+
+  FIELD to_inv = t3;
+  t3 = FIELD_ONE;
+
+  for (uint j = 0; j < end - start; j++) {
+    uint i = end - j - 1;
+    t1 = FIELD_add(compressed_input[i], beta);
+    t2 = FIELD_add(compressed_table[i], gamma);
+    t1 = FIELD_mul(t1, t2);
+    t1 = FIELD_mul(t1, permuted_input[i]);
+    t1 = FIELD_mul(t1, t3);
+    t3 = FIELD_mul(permuted_table[i], t3);
+
+    permuted_input[i] = t1;
+  }
+
+  permuted_table[start] = to_inv;
+}
