@@ -75,8 +75,108 @@ KERNEL void FIELD_mul_by_field(GLOBAL FIELD* elements,
   elements[gid] = FIELD_mul(elements[gid], field);
 }
 
-KERNEL void FIELD_eval_h_lookups(
+KERNEL void FIELD_eval_h_permutation_part1(
   GLOBAL FIELD* value,
+  GLOBAL FIELD* first_set,
+  GLOBAL FIELD* last_set,
+  GLOBAL FIELD* l0,
+  GLOBAL FIELD* l_last,
+  GLOBAL FIELD* l_active_row,
+  GLOBAL FIELD* y_beta_gamma
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+
+  // l_0(X) * (1 - z_0(X)) = 0
+  value[idx] = FIELD_mul(value[idx], y_beta_gamma[0]);
+  FIELD tmp = FIELD_sub(FIELD_ONE, first_set[idx]);
+  tmp = FIELD_mul(tmp, l0[idx]);
+  value[idx] = FIELD_add(value[idx], tmp);
+
+  // l_last(X) * (z_l(X)^2 - z_l(X)) = 0
+  value[idx] = FIELD_mul(value[idx], y_beta_gamma[0]);
+  tmp = FIELD_mul(last_set[idx], last_set[idx]);
+  tmp = FIELD_sub(tmp, last_set[idx]);
+  tmp = FIELD_mul(tmp, l_last[idx]);
+  value[idx] = FIELD_add(value[idx], tmp);
+}
+
+KERNEL void FIELD_eval_h_permutation_part2(
+  GLOBAL FIELD* value,
+  GLOBAL FIELD* curr_set,
+  GLOBAL FIELD* prev_set,
+  GLOBAL FIELD* l0,
+  GLOBAL FIELD* y_beta_gamma,
+  uint rot,
+  uint size
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+
+  uint r_prev = (idx + size + rot) & (size - 1);
+
+  // l_0(X) * (z_i(X) - z_{i-1}(\omega^(last) X)) = 0
+  value[idx] = FIELD_mul(value[idx], y_beta_gamma[0]);
+  FIELD tmp = FIELD_sub(curr_set[idx], prev_set[r_prev]);
+  tmp = FIELD_mul(tmp, l0[idx]);
+  value[idx] = FIELD_add(value[idx], tmp);
+}
+
+KERNEL void FIELD_eval_h_permutation_left_prepare(
+  GLOBAL FIELD* left,
+  GLOBAL FIELD* permutation,
+  uint rot,
+  uint size
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+
+  uint r_prev = (idx + size + rot) & (size - 1);
+  left[idx] = permutation[r_prev];
+}
+
+
+KERNEL void FIELD_eval_h_permutation_left_right(
+  GLOBAL FIELD* left,
+  GLOBAL FIELD* right,
+  GLOBAL FIELD* origin,
+  GLOBAL FIELD* permutation,
+  GLOBAL FIELD* current_delta,
+  GLOBAL FIELD* y_beta_gamma_delta
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+
+  FIELD tmp = FIELD_mul(y_beta_gamma_delta[1], permutation[idx]);
+  tmp = FIELD_add(tmp, y_beta_gamma_delta[2]);
+  tmp = FIELD_add(tmp, origin[idx]);
+  left[idx] = FIELD_mul(left[idx], tmp);
+
+  tmp = FIELD_add(current_delta[idx], y_beta_gamma_delta[2]);
+  tmp = FIELD_add(tmp, origin[idx]);
+  right[idx] = FIELD_mul(right[idx], tmp);
+
+  current_delta[idx] = FIELD_mul(current_delta[idx], y_beta_gamma_delta[3]);
+}
+
+KERNEL void FIELD_eval_h_permutation_part3(
+  GLOBAL FIELD* value,
+  GLOBAL FIELD* left,
+  GLOBAL FIELD* right,
+  GLOBAL FIELD* l_active_row,
+  GLOBAL FIELD* y_beta_gamma
+) {
+  uint gid = GET_GLOBAL_ID();
+  uint idx = gid;
+
+  value[idx] = FIELD_mul(value[idx], y_beta_gamma[0]);
+  FIELD tmp = FIELD_sub(left[idx], right[idx]);
+  tmp = FIELD_mul(tmp, l_active_row[idx]);
+  value[idx] = FIELD_add(value[idx], tmp);
+}
+
+KERNEL void FIELD_eval_h_lookups(
+  GLOBAL FIELD* values,
   GLOBAL FIELD* table,
   GLOBAL FIELD* permuted_input_coset,
   GLOBAL FIELD* permuted_table_coset,
@@ -85,14 +185,14 @@ KERNEL void FIELD_eval_h_lookups(
   GLOBAL FIELD* l_last,
   GLOBAL FIELD* l_active_row,
   GLOBAL FIELD* y_beta_gamma,
-  uint rot_scale,
+  uint rot,
   uint size
 ) {
   uint gid = GET_GLOBAL_ID();
   uint idx = gid;
 
-  uint r_next = (idx + rot_scale) & (size - 1);
-  uint r_prev = (idx + size - rot_scale) & (size - 1);
+  uint r_next = (idx + rot) & (size - 1);
+  uint r_prev = (idx + size - rot) & (size - 1);
 
   FIELD value = values[idx];
 

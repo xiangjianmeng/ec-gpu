@@ -1,5 +1,3 @@
-use ark_std::end_timer;
-use ark_std::start_timer;
 use ec_gpu::GpuName;
 use ff::PrimeField;
 use group::{prime::PrimeCurveAffine, Group};
@@ -244,11 +242,12 @@ where
     }
 }
 
-/// A struct that containts several multiexp kernels for different devices.
+/// A struct that constrains several multiexp kernels for different devices.
 pub struct MultiexpKernel<'a, G>
 where
     G: PrimeCurveAffine,
 {
+    /// a set of single multiexp kernels for different devices.
     pub kernels: Vec<SingleMultiexpKernel<'a, G>>,
 }
 
