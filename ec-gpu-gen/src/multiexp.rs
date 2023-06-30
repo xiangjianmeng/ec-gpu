@@ -1,7 +1,7 @@
 use ec_gpu::GpuName;
 use ff::PrimeField;
 use group::{prime::PrimeCurveAffine, Group};
-use log::{error, info};
+use log::{debug, error};
 use rust_gpu_tools::{program_closures, Device, Program};
 use std::ops::AddAssign;
 use std::sync::{Arc, RwLock};
@@ -296,9 +296,9 @@ where
         if kernels.is_empty() {
             return Err(EcError::Simple("No working GPUs found!"));
         }
-        info!("Multiexp: {} working device(s) selected.", kernels.len());
+        debug!("Multiexp: {} working device(s) selected.", kernels.len());
         for (i, k) in kernels.iter().enumerate() {
-            info!(
+            debug!(
                 "Multiexp: Device {}: {} (Chunk-size: {})",
                 i,
                 k.program.device_name(),
