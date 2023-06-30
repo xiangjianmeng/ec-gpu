@@ -192,9 +192,9 @@ where
         if kernels.is_empty() {
             return Err(EcError::Simple("No working GPUs found!"));
         }
-        info!("FFT: {} working device(s) selected. ", kernels.len());
+        debug!("FFT: {} working device(s) selected. ", kernels.len());
         for (i, k) in kernels.iter().enumerate() {
-            info!("FFT: Device {}: {}", i, k.program.device_name(),);
+            debug!("FFT: Device {}: {}", i, k.program.device_name(),);
         }
 
         Ok(Self { kernels })
