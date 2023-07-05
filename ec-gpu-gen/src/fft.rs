@@ -1,6 +1,6 @@
 use ec_gpu::GpuName;
 use ff::Field;
-use log::{error, info};
+use log::{error, debug};
 use rust_gpu_tools::{program_closures, LocalBuffer, Program};
 use std::cmp;
 use std::sync::{Arc, RwLock};
