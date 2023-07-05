@@ -42,10 +42,38 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
         })
     }
 
-    /// Performs FFT on `input`
+    /// Performs FFT core on `input`
     /// * `omega` - Special value `omega` is used for FFT over finite-fields
     /// * `log_n` - Specifies log2 of number of elements
     pub fn radix_fft(&mut self, input: &mut [F], omega: &F, log_n: u32) -> EcResult<()> {
+        self.radix_fft_core(input, omega, None, log_n)
+    }
+
+    /// Performs iFFT core on `input`
+    /// * `omega` - Special value `omega` is used for FFT over finite-fields
+    /// * `log_n` - Specifies log2 of number of elements
+    /// * `divisor` - Specifies divisor of iFFT
+    pub fn radix_ifft(
+        &mut self,
+        input: &mut [F],
+        omega: &F,
+        divisor: &F,
+        log_n: u32,
+    ) -> EcResult<()> {
+        self.radix_fft_core(input, omega, Some(divisor), log_n)
+    }
+
+    /// Performs FFT/iFFT core on `input`
+    /// * `omega` - Special value `omega` is used for FFT over finite-fields
+    /// * `log_n` - Specifies log2 of number of elements
+    /// * `divisor` - Specifies divisor if it is iFFT
+    fn radix_fft_core(
+        &mut self,
+        input: &mut [F],
+        omega: &F,
+        divisor: Option<&F>,
+        log_n: u32,
+    ) -> EcResult<()> {
         let closures = program_closures!(|program, input: &mut [F]| -> EcResult<()> {
             let n = 1 << log_n;
             // All usages are safe as the buffers are initialized from either the host or the GPU
@@ -129,6 +157,26 @@ impl<'a, F: Field + GpuName> SingleFftKernel<'a, F> {
                 //end_timer!(timer);
             }
             //end_timer!(timer);
+
+            if let Some(divisor) = divisor {
+                let divisor = vec![*divisor];
+                let divisor_buffer = program.create_buffer_from_slice(&divisor[..])?;
+                let local_work_size = 128;
+                let global_work_size = n / local_work_size;
+                let kernel_name = format!("{}_eval_mul_c", F::name());
+                let kernel = program.create_kernel(
+                    &kernel_name,
+                    global_work_size as usize,
+                    local_work_size as usize,
+                )?;
+                kernel
+                    .arg(&src_buffer)
+                    .arg(&src_buffer)
+                    .arg(&0u32)
+                    .arg(&divisor_buffer)
+                    .arg(&(n as u32))
+                    .run()?;
+            }
 
             //let timer = start_timer!(|| format!("fft copy back {}", log_n));
             program.read_into_buffer(&src_buffer, input)?;
