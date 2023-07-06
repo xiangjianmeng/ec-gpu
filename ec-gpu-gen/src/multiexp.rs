@@ -125,6 +125,15 @@ where
     /// means that it is guaranteed that this amount of calculations fit on the GPU this kernel is
     /// running on.
     pub fn multiexp(&self, bases: &[G], exponents: &[G::Scalar]) -> EcResult<G::Curve> {
+        self.multiexp_bound(bases, exponents, 256usize)
+    }
+
+    /// Run the actual multiexp computation on the GPU.
+    ///
+    /// The number of `bases` and `exponents` are determined by [`SingleMultiexpKernel`]`::n`, this
+    /// means that it is guaranteed that this amount of calculations fit on the GPU this kernel is
+    /// running on.
+    pub fn multiexp_bound(&self, bases: &[G], exponents: &[G::Scalar], bits: usize) -> EcResult<G::Curve> {
         assert_eq!(bases.len(), exponents.len());
 
         if let Some(maybe_abort) = &self.maybe_abort {
@@ -134,7 +143,8 @@ where
         }
         let window_size = self.calc_window_size(bases.len());
         // windows_size * num_windows needs to be >= 256 in order for the kernel to work correctly.
-        let num_windows = div_ceil(256, window_size);
+
+        let num_windows = div_ceil(bits, window_size);
         let num_groups = self.work_units / num_windows;
         let bucket_len = 1 << window_size;
 
@@ -168,6 +178,7 @@ where
                 .arg(&(num_groups as u32))
                 .arg(&(num_windows as u32))
                 .arg(&(window_size as u32))
+                .arg(&(bits as u32))
                 .run()?;
 
             let mut results = vec![G::Curve::identity(); num_windows];
@@ -208,21 +219,18 @@ where
 
         let results = self.program.run(closures, ())?;
 
-        // Using the algorithm below, we can calculate the final result by accumulating the results
-        // of those `NUM_GROUPS` * `NUM_WINDOWS` threads.
         let mut acc = G::Curve::identity();
-        let mut bits = 0;
-        let exp_bits = exp_size::<G::Scalar>() * 8;
+        let mut acc_bits = 0;
 
         for i in 0..num_windows {
-            let w = std::cmp::min(window_size, exp_bits - bits);
+            let w = std::cmp::min(window_size, bits - acc_bits);
             if i != 0 {
                 for _ in 0..w {
                     acc = acc.double();
                 }
             }
             acc.add_assign(&results[i]);
-            bits += w; // Process the next window
+            acc_bits += w; // Process the next window
         }
 
         Ok(acc)

@@ -46,7 +46,8 @@ KERNEL void POINT_multiexp(
     uint n,
     uint num_groups,
     uint num_windows,
-    uint window_size) {
+    uint window_size,
+    uint max_bits) {
 
   // We have `num_windows` * `num_groups` threads per multiexp.
   const uint gid = GET_GLOBAL_ID();
@@ -68,11 +69,12 @@ KERNEL void POINT_multiexp(
   const uint nstart = len * (gid / num_windows);
   const uint nend = min(nstart + len, n);
   const uint bits = (gid % num_windows) * window_size;
-  const ushort w = min((ushort)window_size, (ushort)(EXPONENT_BITS - bits));
+  const ushort w = min((ushort)window_size, (ushort)(max_bits - bits));
+  const uint skip_bits = EXPONENT_BITS - max_bits + bits;
 
   POINT_jacobian res = POINT_ZERO;
   for(uint i = nstart; i < nend; i++) {
-    uint ind = EXPONENT_get_bits(EXPONENT_unmont(exps[i]), bits, w);
+    uint ind = EXPONENT_get_bits(EXPONENT_unmont(exps[i]), skip_bits, w);
 
     #if defined(OPENCL_NVIDIA) || defined(CUDA)
       // O_o, weird optimization, having a single special case makes it
