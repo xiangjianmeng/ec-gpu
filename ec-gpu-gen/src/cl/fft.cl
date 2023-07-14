@@ -67,6 +67,18 @@ KERNEL void FIELD_radix_fft(const GLOBAL FIELD* x, // Source buffer
   }
 }
 
+KERNEL void FIELD_distribute_powers_zeta(
+  GLOBAL FIELD* value,
+  GLOBAL FIELD* coset_powers,
+  uint coset_powers_n
+) {
+  const uint gid = GET_GLOBAL_ID();
+  uint index = gid % coset_powers_n;
+  if (index != 0) {
+    value[gid] = FIELD_mul(value[gid], coset_powers[index - 1]);
+  }
+}
+
 /// Multiplies all of the elements by `field`
 KERNEL void FIELD_mul_by_field(GLOBAL FIELD* elements,
                         uint n,
