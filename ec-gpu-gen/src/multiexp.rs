@@ -133,7 +133,12 @@ where
     /// The number of `bases` and `exponents` are determined by [`SingleMultiexpKernel`]`::n`, this
     /// means that it is guaranteed that this amount of calculations fit on the GPU this kernel is
     /// running on.
-    pub fn multiexp_bound(&self, bases: &[G], exponents: &[G::Scalar], bits: usize) -> EcResult<G::Curve> {
+    pub fn multiexp_bound(
+        &self,
+        bases: &[G],
+        exponents: &[G::Scalar],
+        bits: usize,
+    ) -> EcResult<G::Curve> {
         assert_eq!(bases.len(), exponents.len());
 
         if let Some(maybe_abort) = &self.maybe_abort {
@@ -247,6 +252,240 @@ where
         // looking at the resulting numbers.
         let window_size = ((div_ceil(num_terms, self.work_units) as f64).log2() as usize) + 2;
         std::cmp::min(window_size, MAX_WINDOW_SIZE)
+    }
+
+    /// Run the actual multiexp computation on the GPU.
+    ///
+    /// The number of `bases` and `exponents` are determined by [`SingleMultiexpKernel`]`::n`, this
+    /// means that it is guaranteed that this amount of calculations fit on the GPU this kernel is
+    /// running on.
+    pub fn multiexp_bound_and_ifft(
+        &self,
+        bases: &[G],
+        exponents: &mut [G::Scalar],
+        bits: usize,
+        omega: &G::Scalar,
+        divisor: &G::Scalar,
+        log_n: u32,
+    ) -> EcResult<G::Curve>
+    where
+        G::Scalar: GpuName,
+    {
+        assert_eq!(bases.len(), exponents.len());
+
+        if let Some(maybe_abort) = &self.maybe_abort {
+            if maybe_abort() {
+                return Err(EcError::Aborted);
+            }
+        }
+        let window_size = self.calc_window_size(bases.len());
+        // windows_size * num_windows needs to be >= 256 in order for the kernel to work correctly.
+
+        let num_windows = div_ceil(bits, window_size);
+        let num_groups = self.work_units / num_windows;
+        let bucket_len = 1 << window_size;
+
+        // Each group will have `num_windows` threads and as there are `num_groups` groups, there will
+        // be `num_groups` * `num_windows` threads in total.
+        // Each thread will use `num_groups` * `num_windows` * `bucket_len` buckets.
+
+        let closures = program_closures!(|program, _arg| -> EcResult<Vec<G::Curve>> {
+            let base_buffer = program.create_buffer_from_slice(bases)?;
+            let exp_buffer = program.create_buffer_from_slice(exponents)?;
+
+            // It is safe as the GPU will initialize that buffer
+            let bucket_buffer =
+                unsafe { program.create_buffer::<G::Curve>(self.work_units * bucket_len)? };
+            // It is safe as the GPU will initialize that buffer
+            let result_buffer = unsafe { program.create_buffer::<G::Curve>(self.work_units)? };
+
+            // The global work size follows CUDA's definition and is the number of
+            // `LOCAL_WORK_SIZE` sized thread groups.
+            let global_work_size = div_ceil(num_windows * num_groups, LOCAL_WORK_SIZE);
+
+            let kernel_name = format!("{}_multiexp", G::name());
+            let kernel = program.create_kernel(&kernel_name, global_work_size, LOCAL_WORK_SIZE)?;
+
+            kernel
+                .arg(&base_buffer)
+                .arg(&bucket_buffer)
+                .arg(&result_buffer)
+                .arg(&exp_buffer)
+                .arg(&(bases.len() as u32))
+                .arg(&(num_groups as u32))
+                .arg(&(num_windows as u32))
+                .arg(&(window_size as u32))
+                .arg(&(bits as u32))
+                .run()?;
+
+            let mut results = vec![G::Curve::identity(); num_windows];
+            {
+                let acc_buffer = program.create_buffer_from_slice(&results)?;
+
+                let mut max_step = num_groups;
+
+                while max_step > 1 {
+                    let step = max_step.next_power_of_two() >> 1;
+                    let global_work_size = div_ceil(num_windows * step, 1);
+
+                    let kernel_name = format!("{}_multiexp_group_step", G::name());
+                    let kernel = program.create_kernel(&kernel_name, global_work_size, 1)?;
+
+                    kernel
+                        .arg(&result_buffer)
+                        .arg(&(num_groups as u32))
+                        .arg(&(num_windows as u32))
+                        .arg(&(step as u32))
+                        .run()?;
+
+                    max_step = step;
+                }
+
+                let kernel_name = format!("{}_multiexp_group_collect", G::name());
+                let kernel = program.create_kernel(&kernel_name, num_windows, 1)?;
+
+                kernel
+                    .arg(&result_buffer)
+                    .arg(&acc_buffer)
+                    .arg(&(num_windows as u32))
+                    .run()?;
+
+                program.read_into_buffer(&acc_buffer, &mut results)?;
+            }
+
+            // fft
+            {
+                use ff::Field;
+                use std::ops::MulAssign;
+
+                const MAX_LOG2_RADIX: u32 = 8;
+                const MAX_LOG2_LOCAL_WORK_SIZE: u32 = 7;
+                const LOG2_MAX_ELEMENTS: usize = 32;
+
+                let n = 1 << log_n;
+                assert_eq!(exponents.len(), n);
+                // All usages are safe as the buffers are initialized from either the host or the GPU
+                // before they are read.
+
+                //let timer = start_timer!(|| format!("create buffer"));
+                let mut src_buffer = unsafe { program.create_buffer::<G::Scalar>(n)? };
+                let mut dst_buffer = unsafe { program.create_buffer::<G::Scalar>(n)? };
+                //end_timer!(timer);
+
+                // The precalculated values pq` and `omegas` are valid for radix degrees up to `max_deg`
+                let max_deg = std::cmp::min(MAX_LOG2_RADIX, log_n);
+
+                // Precalculate:
+                // [omega^(0/(2^(deg-1))), omega^(1/(2^(deg-1))), ..., omega^((2^(deg-1)-1)/(2^(deg-1)))]
+
+                //let timer = start_timer!(|| "gen omega");
+                let mut pq = vec![G::Scalar::zero(); 1 << max_deg >> 1];
+                let twiddle = omega.pow_vartime([(n >> max_deg) as u64]);
+                pq[0] = G::Scalar::one();
+                if max_deg > 1 {
+                    pq[1] = twiddle;
+                    for i in 2..(1 << max_deg >> 1) {
+                        pq[i] = pq[i - 1];
+                        pq[i].mul_assign(&twiddle);
+                    }
+                }
+                //end_timer!(timer);
+                let pq_buffer = program.create_buffer_from_slice(&pq)?;
+
+                // Precalculate [omega, omega^2, omega^4, omega^8, ..., omega^(2^31)]
+                let mut omegas = vec![G::Scalar::zero(); 32];
+                omegas[0] = *omega;
+                for i in 1..LOG2_MAX_ELEMENTS {
+                    omegas[i] = omegas[i - 1].pow_vartime([2u64]);
+                }
+                let omegas_buffer = program.create_buffer_from_slice(&omegas)?;
+
+                //let timer = start_timer!(|| format!("fft copy {}", log_n));
+                program.write_from_buffer(&mut src_buffer, &*exponents)?;
+                //end_timer!(timer);
+
+                //let timer = start_timer!(|| format!("fft main {}", log_n));
+                // Specifies log2 of `p`, (http://www.bealto.com/gpu-fft_group-1.html)
+                let mut log_p = 0u32;
+                // Each iteration performs a FFT round
+                while log_p < log_n {
+                    //let timer = start_timer!(|| format!("round {}", log_p));
+                    if let Some(maybe_abort) = &self.maybe_abort {
+                        if maybe_abort() {
+                            return Err(EcError::Aborted);
+                        }
+                    }
+
+                    // 1=>radix2, 2=>radix4, 3=>radix8, ...
+                    let deg = std::cmp::min(max_deg, log_n - log_p);
+
+                    let n = 1u32 << log_n;
+                    let local_work_size = 1 << std::cmp::min(deg - 1, MAX_LOG2_LOCAL_WORK_SIZE);
+                    let global_work_size = n >> deg;
+                    let kernel_name = format!("{}_radix_fft", G::Scalar::name());
+                    let kernel = program.create_kernel(
+                        &kernel_name,
+                        global_work_size as usize,
+                        local_work_size as usize,
+                    )?;
+                    kernel
+                        .arg(&src_buffer)
+                        .arg(&dst_buffer)
+                        .arg(&pq_buffer)
+                        .arg(&omegas_buffer)
+                        .arg(&rust_gpu_tools::LocalBuffer::<G::Scalar>::new(1 << deg))
+                        .arg(&n)
+                        .arg(&log_p)
+                        .arg(&deg)
+                        .arg(&max_deg)
+                        .run()?;
+
+                    log_p += deg;
+                    std::mem::swap(&mut src_buffer, &mut dst_buffer);
+                    //end_timer!(timer);
+                }
+
+                let divisor = vec![*divisor];
+                let divisor_buffer = program.create_buffer_from_slice(&divisor[..])?;
+                let local_work_size = 128;
+                let global_work_size = n / local_work_size;
+                let kernel_name = format!("{}_eval_mul_c", G::Scalar::name());
+                let kernel = program.create_kernel(
+                    &kernel_name,
+                    global_work_size as usize,
+                    local_work_size as usize,
+                )?;
+                kernel
+                    .arg(&src_buffer)
+                    .arg(&src_buffer)
+                    .arg(&0u32)
+                    .arg(&divisor_buffer)
+                    .arg(&(n as u32))
+                    .run()?;
+
+                program.read_into_buffer(&src_buffer, exponents)?;
+            }
+
+            Ok(results)
+        });
+
+        let results = self.program.run(closures, ())?;
+
+        let mut acc = G::Curve::identity();
+        let mut acc_bits = 0;
+
+        for i in 0..num_windows {
+            let w = std::cmp::min(window_size, bits - acc_bits);
+            if i != 0 {
+                for _ in 0..w {
+                    acc = acc.double();
+                }
+            }
+            acc.add_assign(&results[i]);
+            acc_bits += w; // Process the next window
+        }
+
+        Ok(acc)
     }
 }
 
