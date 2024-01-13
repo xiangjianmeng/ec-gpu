@@ -289,7 +289,8 @@ where
         // be `num_groups` * `num_windows` threads in total.
         // Each thread will use `num_groups` * `num_windows` * `bucket_len` buckets.
 
-        let closures = program_closures!(|program, _arg| -> EcResult<Vec<G::Curve>> {
+        let closures = program_closures!(|program, arg: &mut _| -> EcResult<Vec<G::Curve>> {
+            let exponents = arg;
             let base_buffer = program.create_buffer_from_slice(bases)?;
             let exp_buffer = program.create_buffer_from_slice(exponents)?;
 
@@ -469,7 +470,7 @@ where
             Ok(results)
         });
 
-        let results = self.program.run(closures, ())?;
+        let results = self.program.run(closures, exponents)?;
 
         let mut acc = G::Curve::identity();
         let mut acc_bits = 0;

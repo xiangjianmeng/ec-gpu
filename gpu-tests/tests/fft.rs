@@ -1,8 +1,6 @@
 #![cfg(any(feature = "cuda", feature = "opencl"))]
 
 use std::time::Instant;
-
-use blstrs::Scalar as Fr;
 use ec_gpu_gen::{
     fft::FftKernel,
     fft_cpu::{parallel_fft, serial_fft},
@@ -10,6 +8,7 @@ use ec_gpu_gen::{
     threadpool::Worker,
 };
 use ff::{Field, PrimeField};
+use pairing::bn256::Fr;
 
 fn omega<F: PrimeField>(num_coeffs: usize) -> F {
     // Compute omega, the 2^exp primitive root of unity
@@ -23,7 +22,6 @@ fn omega<F: PrimeField>(num_coeffs: usize) -> F {
 
 #[test]
 pub fn gpu_fft_consistency() {
-    fil_logger::maybe_init();
     let mut rng = rand::thread_rng();
 
     let worker = Worker::new();
@@ -70,7 +68,6 @@ pub fn gpu_fft_consistency() {
 
 #[test]
 pub fn gpu_fft_many_consistency() {
-    fil_logger::maybe_init();
     let mut rng = rand::thread_rng();
 
     let worker = Worker::new();
