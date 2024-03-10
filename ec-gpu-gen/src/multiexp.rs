@@ -159,8 +159,8 @@ where
         // Each thread will use `num_groups` * `num_windows` * `bucket_len` buckets.
 
         let closures = program_closures!(|program, _arg| -> EcResult<Vec<G::Curve>> {
-            let backtrace = Backtrace::new();
-            println!("{:?}", backtrace);
+            let backtrace = Backtrace::capture();
+            println!("Backtrace:\n{:?}", backtrace);
             let base_buffer = program.create_buffer_from_slice(bases).unwrap();
             let exp_buffer = program.create_buffer_from_slice(exponents).unwrap();
 
