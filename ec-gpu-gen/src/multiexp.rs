@@ -158,21 +158,21 @@ where
         // Each thread will use `num_groups` * `num_windows` * `bucket_len` buckets.
 
         let closures = program_closures!(|program, _arg| -> EcResult<Vec<G::Curve>> {
-            let base_buffer = program.create_buffer_from_slice(bases)?;
-            let exp_buffer = program.create_buffer_from_slice(exponents)?;
+            let base_buffer = program.create_buffer_from_slice(bases).unwrap();
+            let exp_buffer = program.create_buffer_from_slice(exponents).unwrap();
 
             // It is safe as the GPU will initialize that buffer
             let bucket_buffer =
-                unsafe { program.create_buffer::<G::Curve>(self.work_units * bucket_len)? };
+                unsafe { program.create_buffer::<G::Curve>(self.work_units * bucket_len).unwrap() };
             // It is safe as the GPU will initialize that buffer
-            let result_buffer = unsafe { program.create_buffer::<G::Curve>(self.work_units)? };
+            let result_buffer = unsafe { program.create_buffer::<G::Curve>(self.work_units).unwrap() };
 
             // The global work size follows CUDA's definition and is the number of
             // `LOCAL_WORK_SIZE` sized thread groups.
             let global_work_size = div_ceil(num_windows * num_groups, LOCAL_WORK_SIZE);
 
             let kernel_name = format!("{}_multiexp", G::name());
-            let kernel = program.create_kernel(&kernel_name, global_work_size, LOCAL_WORK_SIZE)?;
+            let kernel = program.create_kernel(&kernel_name, global_work_size, LOCAL_WORK_SIZE).unwrap();
 
             kernel
                 .arg(&base_buffer)
@@ -187,7 +187,7 @@ where
                 .run()?;
 
             let mut results = vec![G::Curve::identity(); num_windows];
-            let acc_buffer = program.create_buffer_from_slice(&results)?;
+            let acc_buffer = program.create_buffer_from_slice(&results).unwrap();
 
             let mut max_step = num_groups;
 
@@ -209,7 +209,7 @@ where
             }
 
             let kernel_name = format!("{}_multiexp_group_collect", G::name());
-            let kernel = program.create_kernel(&kernel_name, num_windows, 1)?;
+            let kernel = program.create_kernel(&kernel_name, num_windows, 1).unwrap();
 
             kernel
                 .arg(&result_buffer)
@@ -217,12 +217,12 @@ where
                 .arg(&(num_windows as u32))
                 .run()?;
 
-            program.read_into_buffer(&acc_buffer, &mut results)?;
+            program.read_into_buffer(&acc_buffer, &mut results).unwrap();
 
             Ok(results)
         });
 
-        let results = self.program.run(closures, ())?;
+        let results = self.program.run(closures, ()).unwrap();
 
         let mut acc = G::Curve::identity();
         let mut acc_bits = 0;
