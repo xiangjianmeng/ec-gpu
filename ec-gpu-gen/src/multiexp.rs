@@ -164,6 +164,7 @@ where
             // It is safe as the GPU will initialize that buffer
             let bucket_buffer =
                 unsafe { program.create_buffer::<G::Curve>(self.work_units * bucket_len).unwrap() };
+            println!("work_units: {}, bucket_len: {}", self.work_units, bucket_len);
             // It is safe as the GPU will initialize that buffer
             let result_buffer = unsafe { program.create_buffer::<G::Curve>(self.work_units).unwrap() };
 
